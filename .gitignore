@@ -134,3 +134,9 @@ dmypy.json
 *.ipr
 *.iws
 
+# C++ part
+*.o
+*.obj
+*.exe
+*.so
+*.dll
