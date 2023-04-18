@@ -4,34 +4,40 @@
 
 using namespace std;
 
-void read_file(ifstream& file, int position, int n, string& content) {
+void read_file(ifstream& file, int position, int n, string& content) 
+{
     file.seekg(position);
     content.resize(n);
     file.read(&content[0], n);
 }
 
-int main() {
-    string filename = "random_file.txt"; // replace with the name of your file
+int main(int argc, char* argv[]) 
+{
+    string filename;
+    if (argc == 2) 
+        filename = argv[1];
+    else 
+        filename = "random_file.txt"; // default filename
     ifstream file(filename);
-    if (!file.is_open()) {
+    if (!file.is_open()) 
+    {
         cout << "Error: Cannot open file " << filename << endl;
         exit(EXIT_FAILURE);
     }
     int position = 0;
     int default_n = 4096;
-    while (true) {
+    while (true) 
+    {
         string input;
         cout << "Enter the number of characters to display (default is 4k, -1 to exit): ";
         getline(cin, input);
         int n;
-        if (input.empty()) {
+        if (input.empty()) 
             n = default_n;
-        } else {
+        else 
             n = stoi(input);
-        }
-        if (n == -1) {
+        if (n == -1) 
             break;
-        }
         string next_text;
         read_file(file, position, n, next_text);
         position += n;
