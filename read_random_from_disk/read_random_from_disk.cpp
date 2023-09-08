@@ -15,6 +15,7 @@ int main(int argc, char* argv[])
 {
     string filename = "random_file.txt"; // default filename
     int default_n = 4096;                // default number of characters to read
+    int initial_n = -1;                  // the initial number of characters to read, set through -n arg
 
     for (int i = 1; i < argc; i++)
     {
@@ -26,7 +27,7 @@ int main(int argc, char* argv[])
         }
         else if (arg == "-n" && i + 1 < argc)
         {
-            default_n = stoi(argv[i + 1]);
+            initial_n = stoi(argv[i + 1]);
             i++;
         }
     }
@@ -39,11 +40,21 @@ int main(int argc, char* argv[])
     }
 
     int position = 0;
+    bool firstIteration = true;
     while (true)
     {
         string input;
-        cout << "Enter the number of characters to display (default is 4k, -1 to exit): ";
-        getline(cin, input);
+        if (firstIteration && initial_n != -1)
+        {
+            input = to_string(initial_n);
+            firstIteration = false;
+        }
+        else
+        {
+            cout << "Enter the number of characters to display (default is 4k, -1 to exit): ";
+            getline(cin, input);
+        }
+
         int n;
         if (input.empty())
             n = default_n;
