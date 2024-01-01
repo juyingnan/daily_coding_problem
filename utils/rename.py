@@ -51,6 +51,8 @@ def main():
                 if movie_id:
                     new_name = get_movie_info(movie_id)
                     if new_name:
+                        if '-C' in file:
+                            new_name = new_name.replace(movie_id, movie_id + 'C')
                         old_file_path = file
                         new_file_path = new_name + os.path.splitext(file)[1]
                         rename_list.append((old_file_path, new_file_path))
