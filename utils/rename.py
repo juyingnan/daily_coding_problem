@@ -46,13 +46,17 @@ def main():
 
     for root, dirs, files in os.walk(folder_path):
         for file in files:
-            if file.endswith(('.mp4', '.mkv', '.avi', '.wmv', '.srt', '.ssa', '.vtt')):
+            if file.endswith(('.mp4', '.mkv', '.avi', '.wmv', '.srt', '.ssa', '.ass', '.vtt')):
                 movie_id = get_movie_id(file)
                 if movie_id:
                     new_name = get_movie_info(movie_id)
                     if new_name:
-                        if '-C' in file:
+                        if '-C' in file or '-UC' in file:
                             new_name = new_name.replace(movie_id, movie_id + 'C')
+                            movie_id = movie_id + 'C'
+                        if '-4k' in file or '-4K' in file:
+                            new_name = new_name.replace(movie_id, movie_id + '-4k')
+                            movie_id = movie_id + '-4k'
                         old_file_path = file
                         new_file_path = new_name + os.path.splitext(file)[1]
                         rename_list.append((old_file_path, new_file_path))
