@@ -1,80 +1,65 @@
 import os
 import torch
-import torchaudio
-from transformers import WhisperForConditionalGeneration, WhisperProcessor
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+from datetime import timedelta
 
-def transcribe_audio(audio_file, model, processor, device):
-    """Transcribe an audio file using the Whisper model."""
-    audio, sample_rate = torchaudio.load(audio_file)
+def format_time(seconds):
+    """ Convert time in seconds to the SRT time format HH:MM:SS,MS """
+    millisec = int((seconds % 1) * 1000)
+    seconds = int(seconds)
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    seconds = seconds % 60
+    return f"{hours:02}:{minutes:02}:{seconds:02},{millisec:03}"
 
-    # Convert to mono if stereo
-    if audio.shape[0] > 1:
-        audio = audio.mean(dim=0, keepdim=True)
-
-    # Resample to 16 kHz if necessary
-    if sample_rate != 16000:
-        resampler = torchaudio.transforms.Resample(sample_rate, 16000)
-        audio = resampler(audio)
-
-    # Add batch dimension
-    audio = audio.unsqueeze(0)
-
-    # Move audio to the appropriate device
-    audio = audio.to(device)
-
-    # Transcribe audio
-    input_features = processor(audio.cpu(), return_tensors="pt", sampling_rate=16000).input_features.to(device)
-    transcription = model.generate_transcriptions(input_features, max_length=512)
-
-    return transcription
-
-def create_srt(transcription, chunk_length_sec=30, output_file=None):
-    """Convert transcription to SRT format."""
-    srt_lines = []
-    start_time = 0
-    index = 1
-
-    for segment in transcription:
-        text = segment['text'].strip()
-        if not text:
-            continue
-
-        end_time = start_time + chunk_length_sec
-        start_timecode = f"{int(start_time // 3600):02}:{int((start_time % 3600) // 60):02}:{int(start_time % 60):02},000"
-        end_timecode = f"{int(end_time // 3600):02}:{int((end_time % 3600) // 60):02}:{int(end_time % 60):02},000"
-
-        srt_lines.append(f"{index}")
-        srt_lines.append(f"{start_timecode} --> {end_timecode}")
-        srt_lines.append(f"{text}")
-        srt_lines.append("")
-
-        start_time = end_time
-        index += 1
-
-    srt_content = "\n".join(srt_lines)
-
-    if output_file:
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(srt_content)
-    else:
-        return srt_content
+def convert_to_srt(transcriptions, file_path):
+    """
+    Create an SRT file from the transcriptions with timestamps.
+    """
+    base_filename = file_path.replace('.wav', '.srt')
+    with open(base_filename, 'w', encoding='utf-8') as f:
+        for i, chunk in enumerate(transcriptions['chunks'], start=1):
+            start_time = format_time(chunk['timestamp'][0])
+            end_time = format_time(chunk['timestamp'][1])
+            f.write(f"{i}\n{start_time} --> {end_time}\n{chunk['text'].strip()}\n\n")
     
+    f.close()            
+
 def main():
-    root = r'C:\Users\yiju\Desktop\subs'  # Directory containing .wav files
-    device = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available
+    root = r'C:\Users\yiju\Desktop\subs'  # Directory containing audio files
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"  # Use GPU if available
     print(f"Using {device} device")
+    torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
     # Initialize the Whisper model and processor
-    model = WhisperForConditionalGeneration.from_pretrained(r"C:\Users\yiju\Desktop\openai_whisper_large_v2").to(device)
-    processor = WhisperProcessor.from_pretrained(r"C:\Users\yiju\Desktop\openai_whisper_large_v2")
+    model_id = r"C:\Users\yiju\Desktop\openai_whisper_large_v2"
+    model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, torch_dtype=torch_dtype)
+    processor = AutoProcessor.from_pretrained(model_id)
+
+    pipe = pipeline(
+    "automatic-speech-recognition",
+    model=model,
+    tokenizer=processor.tokenizer,
+    feature_extractor=processor.feature_extractor,
+    max_new_tokens=128,
+    chunk_length_s=30,
+    batch_size=16,
+    return_timestamps=True,
+    torch_dtype=torch_dtype,
+    device=device,)
+
+    supported_formats = ('.wav', '.mp3', '.mp4', '.m4a')  # Extendable list of supported audio formats
+    target_lang = 'zh'
 
     for filename in os.listdir(root):
-        if filename.endswith('.wav'):
+        if filename.endswith(supported_formats):
             file_path = os.path.join(root, filename)
             print(f"Transcribing {filename}...")
-            transcriptions = transcribe_audio(file_path, model, processor, device)
-            create_srt(transcriptions, file_path, chunk_length_sec=30)
-            print(f"Saved {filename.replace('.wav', '.srt')} to {root}")
+            transcriptions = pipe(file_path, generate_kwargs={"language":f"<|{target_lang}|>","task": "transcribe"},)
+            print(transcriptions)
+            convert_to_srt(transcriptions, file_path)
+            print(f"Saved {filename.replace(filename.split('.')[-1], 'srt')} to {root}")
 
 if __name__ == "__main__":
     main()
+
