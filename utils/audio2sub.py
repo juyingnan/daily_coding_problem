@@ -16,13 +16,11 @@ def convert_to_srt(transcriptions, file_path):
     """
     Create an SRT file from the transcriptions with timestamps.
     """
-    base_filename = file_path.replace('.wav', '.srt')
-    with open(base_filename, 'w', encoding='utf-8') as f:
+    with open(file_path, 'w', encoding='utf-8') as f:
         for i, chunk in enumerate(transcriptions['chunks'], start=1):
             start_time = format_time(chunk['timestamp'][0])
             end_time = format_time(chunk['timestamp'][1])
-            f.write(f"{i}\n{start_time} --> {end_time}\n{chunk['text'].strip()}\n\n")
-    
+            f.write(f"{i}\n{start_time} --> {end_time}\n{chunk['text'].strip()}\n\n")    
     f.close()            
 
 def main():
@@ -57,8 +55,9 @@ def main():
             print(f"Transcribing {filename}...")
             transcriptions = pipe(file_path, generate_kwargs={"language":f"<|{target_lang}|>","task": "transcribe"},)
             print(transcriptions)
-            convert_to_srt(transcriptions, file_path)
-            print(f"Saved {filename.replace(filename.split('.')[-1], 'srt')} to {root}")
+            result_path = os.path.join(root, 'result', filename.replace(filename.split('.')[-1], f'{target_lang}.srt'))
+            convert_to_srt(transcriptions, result_path)
+            print(f"Saved {result_path} to {root}")
 
 if __name__ == "__main__":
     main()
