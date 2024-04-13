@@ -1,6 +1,7 @@
 import os
 from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 import re
+from tqdm import tqdm
 import torch
 
 def translate_srt(file_path, src_lang, tgt_lang, model, tokenizer):
@@ -13,7 +14,7 @@ def translate_srt(file_path, src_lang, tgt_lang, model, tokenizer):
     buffer = []
     is_text = False
 
-    for line in lines:
+    for line in tqdm(lines):
         # Check if the line is a number (index of subtitle)
         if re.match(r'^\d+$', line.strip()):
             if buffer:
