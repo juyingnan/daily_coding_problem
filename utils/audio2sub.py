@@ -5,6 +5,8 @@ from datetime import timedelta
 
 def format_time(seconds):
     """ Convert time in seconds to the SRT time format HH:MM:SS,MS """
+    if seconds is None:
+        return f"{0:02}:{0:02}:{0:02},{0:03}"
     millisec = int((seconds % 1) * 1000)
     seconds = int(seconds)
     hours = seconds // 3600
@@ -54,7 +56,7 @@ def main():
             file_path = os.path.join(root, filename)
             print(f"Transcribing {filename}...")
             transcriptions = pipe(file_path, generate_kwargs={"language":f"<|{target_lang}|>","task": "transcribe"},)
-            print(transcriptions)
+            # print(transcriptions)
             result_path = os.path.join(root, 'result', filename.replace(filename.split('.')[-1], f'{target_lang}.srt'))
             convert_to_srt(transcriptions, result_path)
             print(f"Saved {result_path} to {root}")
