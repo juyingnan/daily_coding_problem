@@ -46,6 +46,8 @@ def delete_duplicates(files_dict):
                         is_deleted = True
                         os.remove(duplicate)
                         print(f"Deleted: {duplicate}")
+                    else:
+                        print(f"Size mismatch: {duplicate} | {original_size} != {duplicate_size}")
 
                 # Print the original file that is kept
                 if is_deleted:
