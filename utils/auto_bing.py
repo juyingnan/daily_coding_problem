@@ -41,7 +41,7 @@ if __name__ == "__main__":
         "Jolteon", "Flareon", "Porygon", "Togepi", "Mareep",
         "Espeon", "Umbreon", "Leafeon", "Glaceon", "Sylveon",
         "Chikorita", "Cyndaquil", "Totodile", "Pichu", "Cleffa",
-        "Igglybuff", "Togetic", "Natu", "Xatu", "Mareep"
+        "Igglybuff", "Togetic", "Giratina", "Gengar", "Shedinja"
     ]
 
     # Perform the searches
