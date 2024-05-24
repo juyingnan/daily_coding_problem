@@ -26,11 +26,11 @@ def perform_search(search_terms):
 
         # Wait for a few seconds before the next search to mimic human behavior
         # random seconds between 3 and 5
-        time.sleep(3 + 2 * random.random())
+        time.sleep(5 + 2 * random.random())
 
         # Return to Bing homepage for the next search
         webbrowser.open("https://www.bing.com")
-        time.sleep(3 + 2 * random.random())  # Adjust this delay based on how quickly the homepage loads
+        time.sleep(5 + 2 * random.random())  # Adjust this delay based on how quickly the homepage loads
 
 
 if __name__ == "__main__":
