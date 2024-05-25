@@ -41,7 +41,8 @@ if __name__ == "__main__":
         "Jolteon", "Flareon", "Porygon", "Togepi", "Mareep",
         "Espeon", "Umbreon", "Leafeon", "Glaceon", "Sylveon",
         "Chikorita", "Cyndaquil", "Totodile", "Pichu", "Cleffa",
-        "Igglybuff", "Togetic", "Giratina", "Gengar", "Shedinja"
+        "Igglybuff", "Togetic", "Giratina", "Gengar", "Shedinja",
+        "map", "shopping", "weather", "9214490355087808457410",
     ]
 
     # Perform the searches
