@@ -35,15 +35,16 @@ def perform_search(search_terms):
 
 if __name__ == "__main__":
     # List of Pokémon names
-    pokemon_names = [
-        "Pikachu", "Bulbasaur", "Charmander", "Squirtle", "Jigglypuff",
-        "Meowth", "Psyduck", "Snorlax", "Eevee", "Vaporeon",
-        "Jolteon", "Flareon", "Porygon", "Togepi", "Mareep",
-        "Espeon", "Umbreon", "Leafeon", "Glaceon", "Sylveon",
-        "Chikorita", "Cyndaquil", "Totodile", "Pichu", "Cleffa",
-        "Igglybuff", "Togetic", "Giratina", "Gengar", "Shedinja",
-        "map", "shopping", "weather", "9214490355087808457410",
-    ]
+    # read from pokemon_name_list.txt
+    with open('pokemon_name_list.txt', 'r') as file:
+        pokemon_names = file.read().splitlines()
+        other_list = [
+            "map", "shopping", "weather", "9214490355087808457410",
+            "I want it that way lyrics", "Love Actually movie",
+        ]
+    # random select 30 from the list
+    random.shuffle(pokemon_names)
+    search_names = pokemon_names[:3] # + other_list
 
     # Perform the searches
-    perform_search(pokemon_names)
+    perform_search(search_names)
