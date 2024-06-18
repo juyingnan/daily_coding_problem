@@ -44,8 +44,8 @@ def perform_search(search_terms):
             elapsed_time += wait_time
 
         # Return to Bing homepage for the next search
-        webbrowser.open("https://www.bing.com")
-        time.sleep(5 + 2 * random.random())  # Adjust this delay based on how quickly the homepage loads
+        # webbrowser.open("https://www.bing.com")
+        # time.sleep(5 + 2 * random.random())
 
 
 if __name__ == "__main__":
