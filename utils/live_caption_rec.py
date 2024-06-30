@@ -57,25 +57,20 @@ if __name__ == '__main__':
             print('Recording live captions. Press Ctrl+C to stop.')
 
             text_block = app.top_window().child_window(auto_id="CaptionsTextBlock", control_type="Text")
-            # Process last two rows of the text block
+            # Process text block
             live_accumulation_buffer = ''
             live = ''
+            previous_text = ""
             while True:
-                lines = text_block.window_text().splitlines()
-                if len(lines) == 0:
-                    continue
-                translated, live = (lines[-2:] if len(lines) > 1 else ["", lines[-1]])
-                if not is_text_similar_simple(live, live_accumulation_buffer):
-                    if len(transcript) == 0 or (transcript[-1] != translated):
-                        transcript.append(translated)
-                        print(translated)  # Output the transcription in real-time
-                    live_accumulation_buffer = live
-
-                time.sleep(0.1)
+                current_text = text_block.window_text()
+                if current_text != previous_text:
+                    live_accumulation_buffer = current_text[len(previous_text):]
+                    if live_accumulation_buffer.strip():
+                        print(live_accumulation_buffer, end='', flush=True)
+                        transcript.append(live_accumulation_buffer.strip())
+                    previous_text = current_text
+                time.sleep(0.01)  # Reduce the sleep interval to check more frequently
         except KeyboardInterrupt:
-            transcript.append(live)
-            print(live)  # Output the last captured live text
-
-        # Optionally, you can still save the transcript to a file if needed
-        with open('transcript.txt', 'w', encoding='utf-8') as f:
-            f.write('\n'.join(transcript))
+            print("\nRecording stopped.")
+            with open('transcript.txt', 'w', encoding='utf-8') as f:
+                f.write('\n'.join(transcript))
