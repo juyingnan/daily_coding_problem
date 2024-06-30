@@ -32,7 +32,7 @@ def text_to_vector(text):
 
 def is_text_similar_simple(a, b, theta=0.8):
     """Check if two text strings are similar if:
-    - a is tarting with b or
+    - a is starting with b or
     - cosine similarity is greater than \theta
     """
     if len(a) == 0 or len(b) == 0:
@@ -68,12 +68,14 @@ if __name__ == '__main__':
                 if not is_text_similar_simple(live, live_accumulation_buffer):
                     if len(transcript) == 0 or (transcript[-1] != translated):
                         transcript.append(translated)
+                        print(translated)  # Output the transcription in real-time
                     live_accumulation_buffer = live
 
                 time.sleep(0.1)
         except KeyboardInterrupt:
             transcript.append(live)
+            print(live)  # Output the last captured live text
 
-        # save the transcript to a file
+        # Optionally, you can still save the transcript to a file if needed
         with open('transcript.txt', 'w', encoding='utf-8') as f:
             f.write('\n'.join(transcript))
