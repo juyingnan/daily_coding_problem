@@ -34,7 +34,9 @@ def convert_to_unicode(file_path):
 # Directory containing your text files
 directory = r'C:\Users\bunny\Desktop\TXTS'
 
-for filename in os.listdir(directory):
-    if filename.endswith(".txt"):
-        file_path = os.path.join(directory, filename)
-        convert_to_unicode(file_path)
+# Replace the simple directory listing with recursive traversal
+for root, dirs, files in os.walk(directory):
+    for filename in files:
+        if filename.endswith(".txt"):
+            file_path = os.path.join(root, filename)
+            convert_to_unicode(file_path)
