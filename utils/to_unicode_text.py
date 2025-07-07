@@ -31,12 +31,15 @@ def convert_to_unicode(file_path):
                   f" {detected_encoding}.")
 
 
+# List of file extensions to process
+extensions = [".srt", ".txt", ".ass", ".sub", ".vtt", ".smi", ".ssa"]
+
 # Directory containing your text files
 directory = r'C:\Users\bunny\Desktop\TXTS'
 
 # Replace the simple directory listing with recursive traversal
 for root, dirs, files in os.walk(directory):
     for filename in files:
-        if filename.endswith(".txt"):
+        if any(filename.endswith(ext) for ext in extensions):
             file_path = os.path.join(root, filename)
             convert_to_unicode(file_path)
