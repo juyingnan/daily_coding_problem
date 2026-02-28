@@ -146,6 +146,6 @@ dmypy.json
 # text files
 *.txt
 
-# csv and jsonl
+# csv and json
 *.csv
-*.jsonl
+*.json
