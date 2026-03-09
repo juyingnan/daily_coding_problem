@@ -183,6 +183,31 @@ def rect_to_list(rect: fitz.Rect) -> list[float]:
     return [round(float(rect.x0), 3), round(float(rect.y0), 3), round(float(rect.x1), 3), round(float(rect.y1), 3)]
 
 
+def extract_text_from_rect_words(page: fitz.Page, rect: fitz.Rect, padding: float = 1.5) -> str:
+    clip = fitz.Rect(rect.x0 - padding, rect.y0 - padding, rect.x1 + padding, rect.y1 + padding)
+    words = page.get_text("words", clip=clip)
+    if not words:
+        return ""
+
+    selected: list[tuple[float, float, str]] = []
+    clip_area = max(clip.get_area(), 1.0)
+    for word in words:
+        word_rect = fitz.Rect(word[:4])
+        inter = clip & word_rect
+        if inter.is_empty:
+            continue
+        overlap = inter.get_area() / max(word_rect.get_area(), 1.0)
+        containment = inter.get_area() / clip_area
+        if overlap >= 0.3 or containment >= 0.01:
+            selected.append((float(word_rect.y0), float(word_rect.x0), str(word[4])))
+
+    if not selected:
+        return ""
+
+    selected.sort(key=lambda item: (round(item[0], 1), item[1]))
+    return clean_text(" ".join(text for _, _, text in selected))
+
+
 def color_to_list(stroke: Any) -> list[float]:
     if isinstance(stroke, (list, tuple)):
         return [round(float(x), 4) for x in stroke]
@@ -248,7 +273,7 @@ def extract_text_from_quads(page: fitz.Page, vertices: list[Any] | None) -> tupl
         quad = fitz.Quad(norm_points)
         rect = quad.rect
         rect = fitz.Rect(rect.x0 - 1, rect.y0 - 1, rect.x1 + 1, rect.y1 + 1)
-        text = clean_text(page.get_text("text", clip=rect))
+        text = extract_text_from_rect_words(page, rect)
         if text:
             texts.append(text)
     if not texts:
@@ -286,64 +311,74 @@ def extract_pdf_comments(pdf_path: Path, type_filter: set[str], context_chars: i
             page_text = clean_text(page.get_text("text"))
             annot = page.first_annot
             while annot:
-                info = annot.info or {}
-                raw_subtype = annot.type[1] if annot.type else "Unknown"
-                subtype = normalize_subtype(raw_subtype)
-                if type_filter and subtype not in type_filter:
-                    annot = annot.next
-                    continue
+                try:
+                    info = annot.info or {}
+                    raw_subtype = annot.type[1] if annot.type else "Unknown"
+                    subtype = normalize_subtype(raw_subtype)
+                    if type_filter and subtype not in type_filter:
+                        annot = annot.next
+                        continue
 
-                comment_text = clean_text(info.get("content", ""))
-                quoted_text, quote_warnings = extract_text_from_quads(page, annot.vertices)
-                if not quoted_text:
-                    quoted_text = clean_text(page.get_text("text", clip=annot.rect))
-                context_text = extract_context(page_text, quoted_text, context_chars)
+                    comment_text = clean_text(info.get("content", ""))
+                    quoted_text, quote_warnings = extract_text_from_quads(page, annot.vertices)
+                    if not quoted_text:
+                        quoted_text = extract_text_from_rect_words(page, annot.rect)
+                    context_text = extract_context(page_text, quoted_text, context_chars)
 
-                warnings = list(quote_warnings)
-                if page.rotation:
-                    warnings.append("rotated_page")
-                if not page_text:
-                    warnings.append("text_layer_empty")
+                    warnings = list(quote_warnings)
+                    if page.rotation:
+                        warnings.append("rotated_page")
+                    if not page_text:
+                        warnings.append("text_layer_empty")
 
-                bbox = rect_to_list(annot.rect)
-                record_id = build_id(pdf_path, page_index + 1, subtype, comment_text or quoted_text, bbox)
-                if record_id in seen_ids:
-                    annot = annot.next
-                    continue
-                seen_ids.add(record_id)
+                    bbox = rect_to_list(annot.rect)
+                    record_id = build_id(pdf_path, page_index + 1, subtype, comment_text or quoted_text, bbox)
+                    if record_id in seen_ids:
+                        annot = annot.next
+                        continue
+                    seen_ids.add(record_id)
 
-                confidence = 0.4
-                if quoted_text:
-                    confidence += 0.35
-                if comment_text:
-                    confidence += 0.2
-                if not warnings:
-                    confidence += 0.05
-                confidence = min(1.0, round(confidence, 3))
+                    confidence = 0.4
+                    if quoted_text:
+                        confidence += 0.35
+                    if comment_text:
+                        confidence += 0.2
+                    if not warnings:
+                        confidence += 0.05
+                    confidence = min(1.0, round(confidence, 3))
 
-                record = CommentRecord(
-                    id=record_id,
-                    file=str(pdf_path),
-                    page=page_index + 1,
-                    subtype=subtype,
-                    author=clean_text(info.get("title", "")),
-                    comment_text=comment_text,
-                    quoted_text=quoted_text,
-                    context_text=context_text,
-                    created_at=parse_pdf_date(info.get("creationDate")),
-                    modified_at=parse_pdf_date(info.get("modDate")),
-                    bbox=bbox,
-                    quadpoints=quads_from_vertices(annot.vertices),
-                    color=color_to_list(annot.colors.get("stroke") if annot.colors else None),
-                    extraction_confidence=confidence,
-                    warnings=warnings,
-                    raw={
-                        "subtype": raw_subtype,
-                        "name": clean_text(info.get("name", "")),
-                        "subject": clean_text(info.get("subject", "")),
-                    },
-                )
-                records.append(record)
+                    record = CommentRecord(
+                        id=record_id,
+                        file=str(pdf_path),
+                        page=page_index + 1,
+                        subtype=subtype,
+                        author=clean_text(info.get("title", "")),
+                        comment_text=comment_text,
+                        quoted_text=quoted_text,
+                        context_text=context_text,
+                        created_at=parse_pdf_date(info.get("creationDate")),
+                        modified_at=parse_pdf_date(info.get("modDate")),
+                        bbox=bbox,
+                        quadpoints=quads_from_vertices(annot.vertices),
+                        color=color_to_list(annot.colors.get("stroke") if annot.colors else None),
+                        extraction_confidence=confidence,
+                        warnings=warnings,
+                        raw={
+                            "subtype": raw_subtype,
+                            "name": clean_text(info.get("name", "")),
+                            "subject": clean_text(info.get("subject", "")),
+                        },
+                    )
+                    records.append(record)
+                except Exception as exc:  # noqa: BLE001
+                    failures.append(
+                        {
+                            "file": str(pdf_path),
+                            "page": page_index + 1,
+                            "error": "annotation_processing_failed",
+                            "detail": str(exc),
+                        }
+                    )
                 annot = annot.next
         except Exception as exc:  # noqa: BLE001
             failures.append(
