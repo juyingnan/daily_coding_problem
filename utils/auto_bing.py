@@ -1,16 +1,12 @@
 import random
+import urllib.parse
 import webbrowser
 import pyautogui
 import time
 from pathlib import Path
 
-# Configuration - adjust these based on your screen
-SEARCH_BOX_X = 600
-SEARCH_BOX_Y = 400
-
 # Timing tweaks
 BROWSER_STARTUP = 5
-CLICK_TO_TYPE_DELAY = (2, 4)
 TYPE_TO_ENTER_DELAY = (2, 4)
 BETWEEN_SEARCHES = (300, 360)  # 5-6 minutes
 MOUSE_CHECK_INTERVAL = 30
@@ -18,11 +14,17 @@ MOUSE_CHECK_INTERVAL = 30
 SEARCH_LIMIT = 30
 
 
-def clear_search_box():
-    pyautogui.hotkey('ctrl', 'a')
-    time.sleep(0.1)
-    pyautogui.press('backspace')
-    time.sleep(0.1)
+def focus_address_bar():
+    pyautogui.hotkey('ctrl', 'l')
+    time.sleep(0.2)
+
+
+def open_search(term):
+    query = urllib.parse.quote_plus(term.lower())
+    pyautogui.write(f"https://www.bing.com/search?q={query}", interval=0.02)
+    time.sleep(random.uniform(*TYPE_TO_ENTER_DELAY))
+    pyautogui.press('enter')
+    time.sleep(1)
 
 
 def perform_search(search_terms):
@@ -36,23 +38,8 @@ def perform_search(search_terms):
         print(f"Search {idx}/{len(search_terms)}: {term}")
         
         try:
-            # Click on the search box
-            pyautogui.click(SEARCH_BOX_X, SEARCH_BOX_Y)
-
-            # Add a slight delay to ensure the search box is focused
-            time.sleep(random.uniform(*CLICK_TO_TYPE_DELAY))
-
-            # Replace any existing query instead of depending on a fixed number of backspaces.
-            clear_search_box()
-
-            # Type the search term
-            pyautogui.typewrite(term.lower(), interval=0.1)
-
-            # Wait before pressing Enter
-            time.sleep(random.uniform(*TYPE_TO_ENTER_DELAY))
-
-            # Press Enter to search
-            pyautogui.press('enter')
+            focus_address_bar()
+            open_search(term)
 
             # Wait for 5-6 minutes before the next iteration
             total_wait_time = random.randint(*BETWEEN_SEARCHES)
