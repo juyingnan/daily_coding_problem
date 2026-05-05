@@ -9,7 +9,7 @@ def list_directory_tree(root_dir):
         tree.append(f'{indent}{os.path.basename(root)}/')
         sub_indent = ' ' * 4 * (level + 1)
         for f in files:
-            if f.endswith('.py') or f.endswith('.ini') or f.endswith('.md'):
+            if f.endswith('.py') or f.endswith('.ini') or f.endswith('.md') or f.endswith('.cs'):
                 tree.append(f'{sub_indent}{f}')
     return '\n'.join(tree)
 
@@ -36,7 +36,7 @@ def flatten_folder(root_dir, output_file):
         # Walk through the directory and write each file's content
         for root, _, files in os.walk(root_dir):
             for file in files:
-                if file.endswith('.py') or file.endswith('.ini') or file.endswith('.md'):
+                if file.endswith('.py') or file.endswith('.ini') or file.endswith('.md') or file.endswith('.cs'):
                     file_path = os.path.join(root, file)
                     out_f.write(f"File: {file_path}\n")
                     content = read_file_content(file_path)
@@ -44,6 +44,6 @@ def flatten_folder(root_dir, output_file):
                     out_f.write("\n\n")
 
 # Usage
-root_directory = r'C:\Users\yingnanju\source\repos\daily_coding_problem'  # Use raw string to handle backslashes
+root_directory = r'C:\Users\yingnanju\Downloads\FuseBot\FuseBotX\TuningService'  # Use raw string to handle backslashes
 output_filename = 'flat_text_representation.txt'
 flatten_folder(root_directory, output_filename)
