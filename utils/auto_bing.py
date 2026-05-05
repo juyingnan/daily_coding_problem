@@ -18,6 +18,13 @@ MOUSE_CHECK_INTERVAL = 30
 SEARCH_LIMIT = 30
 
 
+def clear_search_box():
+    pyautogui.hotkey('ctrl', 'a')
+    time.sleep(0.1)
+    pyautogui.press('backspace')
+    time.sleep(0.1)
+
+
 def perform_search(search_terms):
     # Open Bing in the default browser
     webbrowser.open("https://www.bing.com")
@@ -35,10 +42,8 @@ def perform_search(search_terms):
             # Add a slight delay to ensure the search box is focused
             time.sleep(random.uniform(*CLICK_TO_TYPE_DELAY))
 
-            # Clear search box with backspace
-            for _ in range(20):
-                pyautogui.press('backspace')
-            time.sleep(0.1)
+            # Replace any existing query instead of depending on a fixed number of backspaces.
+            clear_search_box()
 
             # Type the search term
             pyautogui.typewrite(term.lower(), interval=0.1)
