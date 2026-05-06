@@ -7,8 +7,8 @@ from pathlib import Path
 # Timing tweaks
 BROWSER_STARTUP = 5
 
-BETWEEN_SEARCHES = (15, 20)  # 5-6 minutes
-MOUSE_CHECK_INTERVAL = 2
+BETWEEN_SEARCHES = (300, 360)  # 5-6 minutes
+MOUSE_CHECK_INTERVAL = 15
 
 SEARCH_LIMIT = 30
 
