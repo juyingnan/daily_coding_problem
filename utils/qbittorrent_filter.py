@@ -11,6 +11,21 @@ CONFIG_DEFAULT = {
     # Tag torrents once processed to avoid re-processing
     "processed_tag": "auto_mainfile_done",
 
+    # Independent junk filtering. This does not change the main-file decision.
+    "junk_filter_enabled": True,
+    "junk_processed_tag": "auto_junk_filter_v1",
+    "small_video_filter_enabled": True,
+    "small_video_max_bytes": 100 * 1024 * 1024,
+    "small_video_max_ratio": 0.05,
+    "small_video_min_reference_bytes": 500 * 1024 * 1024,
+    "video_ext": [
+        ".3gp", ".avi", ".flv", ".m2ts", ".m4v", ".mkv", ".mov",
+        ".mp4", ".mpeg", ".mpg", ".mts", ".ts", ".webm", ".wmv"
+    ],
+    "suspicious_video_name_terms": [
+        "advert", "preview", "promo", "sample", "trailer", "www."
+    ],
+
     # Thresholds
     "single_dominant_ratio": 0.95,
     "group_dominant_sum_ratio": 0.95,
@@ -222,6 +237,45 @@ def find_archive_volume_ids(files: List[QBFile], cfg: Dict) -> Set[int]:
         return ids
     return set()
 
+def find_junk_file_ids(files: List[QBFile], cfg: Dict) -> Set[int]:
+    if not cfg.get("junk_filter_enabled", True):
+        return set()
+
+    deselect_ext = {str(x).lower() for x in cfg.get("prefer_deselect_ext", [])}
+    junk_ids = {f.fid for f in files if file_ext(f.name) in deselect_ext}
+
+    if not cfg.get("small_video_filter_enabled", True):
+        return junk_ids
+
+    video_ext = {str(x).lower() for x in cfg.get("video_ext", [])}
+    videos = [f for f in files if file_ext(f.name) in video_ext]
+    if len(videos) < 2:
+        return junk_ids
+
+    largest = max(videos, key=lambda f: f.size)
+    if largest.size < int(cfg.get("small_video_min_reference_bytes", 500 * 1024 * 1024)):
+        return junk_ids
+
+    max_bytes = int(cfg.get("small_video_max_bytes", 100 * 1024 * 1024))
+    max_ratio = float(cfg.get("small_video_max_ratio", 0.05))
+    suspicious_terms = tuple(
+        str(term).lower()
+        for term in cfg.get("suspicious_video_name_terms", [])
+        if str(term).strip()
+    )
+    episodic = is_episodic_set(files, cfg)
+
+    for f in videos:
+        if f.fid == largest.fid or f.size > max_bytes:
+            continue
+        if f.size / largest.size > max_ratio:
+            continue
+        if episodic and not any(term in normalize_name(f.name) for term in suspicious_terms):
+            continue
+        junk_ids.add(f.fid)
+
+    return junk_ids
+
 def choose_files(files: List[QBFile], cfg: Dict) -> Optional[Tuple[str, List[int], List[int]]]:
     if len(files) < cfg["min_files_to_consider"]:
         return None
@@ -299,6 +353,8 @@ def torrent_passes_filters(t: Dict, cfg: Dict) -> bool:
 def main() -> None:
     cfg = load_config()
     processed_tag = cfg["processed_tag"]
+    junk_filter_enabled = bool(cfg.get("junk_filter_enabled", True))
+    junk_processed_tag = cfg.get("junk_processed_tag", "auto_junk_filter_v1")
 
     for inst in cfg["instances"]:
         c = QBClient(
@@ -324,6 +380,7 @@ def main() -> None:
         skipped_too_few_files = 0
         skipped_no_rule = 0
         applied = 0
+        junk_filtered = 0
 
         try:
             torrents = c.torrents_info()
@@ -333,7 +390,9 @@ def main() -> None:
             for t in torrents:
                 tags = t.get("tags") or ""
                 tag_list = [x.strip() for x in tags.split(",") if x.strip()]
-                if processed_tag in tag_list:
+                main_processed = processed_tag in tag_list
+                junk_processed = junk_processed_tag in tag_list
+                if main_processed and (not junk_filter_enabled or junk_processed):
                     skipped_tagged += 1
                     continue
 
@@ -351,46 +410,47 @@ def main() -> None:
                     skipped_too_few_files += 1
                     continue
 
-                decision = choose_files(files, cfg)
-                if decision is None:
+                junk_ids = find_junk_file_ids(files, cfg) if not junk_processed else set()
+                decision = None if main_processed else choose_files(files, cfg)
+                if decision is None and not junk_ids:
+                    if junk_filter_enabled and not junk_processed:
+                        c.add_tag(h, junk_processed_tag)
                     skipped_no_rule += 1
                     continue
 
-                mode, keep_ids, drop_ids = decision
+                if decision is None:
+                    mode, keep_ids, drop_ids = "junk_only", [], []
+                else:
+                    mode, keep_ids, drop_ids = decision
 
-                if drop_ids:
-                    c.set_file_priority(h, drop_ids, 0)
+                keep_set = set(keep_ids)
+                all_drop_ids = sorted((set(drop_ids) | junk_ids) - keep_set)
+
+                if all_drop_ids:
+                    c.set_file_priority(h, all_drop_ids, 0)
                 if keep_ids:
                     c.set_file_priority(h, keep_ids, 1)
 
-                # Optional: extra drop for "ad-like" extensions unless kept
-                if cfg.get("prefer_deselect_ext"):
-                    keep_set = set(keep_ids)
-                    prefer_set = set(x.lower() for x in cfg["prefer_deselect_ext"])
-                    extra_drop = []
-                    for f in files:
-                        if f.fid in keep_set:
-                            continue
-                        if file_ext(f.name) in prefer_set:
-                            extra_drop.append(f.fid)
-                    if extra_drop:
-                        c.set_file_priority(h, extra_drop, 0)
-
-                c.add_tag(h, processed_tag)
-                applied += 1
+                if decision is not None:
+                    c.add_tag(h, processed_tag)
+                    applied += 1
+                if junk_filter_enabled and not junk_processed:
+                    c.add_tag(h, junk_processed_tag)
+                junk_filtered += len(junk_ids - keep_set)
 
                 tot_size = sum(f.size for f in files) or 1
                 kept_size = sum(f.size for f in files if f.fid in set(keep_ids))
                 episodic_flag = is_episodic_set(files, cfg)
                 print(f"[{c.name}] APPLIED {mode}: {name} | keep {len(keep_ids)} ({kept_size/tot_size:.1%}) "
-                      f"drop {len(drop_ids)} | episodic={episodic_flag}", flush=True)
+                        f"drop {len(all_drop_ids)} | junk {len(junk_ids - keep_set)} | "
+                        f"episodic={episodic_flag}", flush=True)
 
         except Exception as e:
             print(f"[{c.name}] error during processing: {e}", flush=True)
             traceback.print_exc()
 
         print(
-            f"[{c.name}] DONE. total={total}, applied={applied}, "
+            f"[{c.name}] DONE. total={total}, applied={applied}, junk_filtered={junk_filtered}, "
             f"skipped_tagged={skipped_tagged}, skipped_filtered={skipped_filtered}, "
             f"skipped_too_few_files={skipped_too_few_files}, skipped_no_rule={skipped_no_rule}",
             flush=True
