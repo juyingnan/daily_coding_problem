@@ -70,7 +70,7 @@ def get_movie_id_source1(movie_id, driver, cfg):
         titles = soup.select(title_selector)
         for title in titles:
             strong_tag = title.find('strong')
-            if strong_tag and strong_tag.text.lower() == movie_id.lower():
+            if strong_tag and strong_tag.get_text(strip=True).lower() == movie_id.lower():
                 content = title.get_text(strip=True).replace(strong_tag.text, '').strip()
                 for token in src_cfg.get("strip_tokens", []):
                     content = content.replace(token, "")
@@ -125,17 +125,22 @@ def get_movie_info(movie_id, driver, cfg, source='source1'):
     return None
 
 
-def main(driver, sources_cfg, sleep_duration=5):
-    folder_path = r'E:\Downloads\TEMP\TEMP'
+def main(driver, sources_cfg, sleep_duration=5, folder_path=None):
+    folder_path = folder_path or os.environ.get("RENAME_FOLDER", r'E:\Downloads\TEMP\TEMP')
     rename_list = []
+    title_cache = {}
 
     for root, dirs, files in os.walk(folder_path):
         for file in files:
-            if file.endswith(('.mp4', '.mkv', '.avi', '.wmv', '.srt', '.ssa', '.ass', '.vtt')):
+            if file.lower().endswith(('.mp4', '.mkv', '.avi', '.wmv', '.srt', '.ssa', '.ass', '.vtt')):
                 movie_id = get_movie_id(file)
                 if movie_id:
-                    new_name = get_movie_info(movie_id, driver, sources_cfg, source='source1')
-                    time.sleep(sleep_duration)
+                    new_name = title_cache.get(movie_id)
+                    if new_name is None:
+                        new_name = get_movie_info(movie_id, driver, sources_cfg, source='source1')
+                        time.sleep(sleep_duration)
+                        if new_name:
+                            title_cache[movie_id] = new_name
                     if new_name:
                         final_movie_id = movie_id
                         if '-C' in file or '-UC' in file:
@@ -145,10 +150,12 @@ def main(driver, sources_cfg, sleep_duration=5):
                         if final_movie_id != movie_id:
                             new_name = new_name.replace(movie_id, final_movie_id)
                             movie_id = final_movie_id
-                        old_file_path = file
-                        new_file_path = new_name + os.path.splitext(file)[1]
+                        old_file_path = os.path.relpath(os.path.join(root, file), folder_path)
+                        relative_dir = os.path.dirname(old_file_path)
+                        new_filename = new_name + os.path.splitext(file)[1]
+                        new_file_path = os.path.join(relative_dir, new_filename) if relative_dir else new_filename
                         rename_list.append((old_file_path, new_file_path))
-                        logging.info(f"Renamed: {old_file_path} -> {new_file_path}")
+                        logging.info(f"Planned: {old_file_path} -> {new_file_path}")
 
     with open(os.path.join(folder_path, 'rename_list.txt'), 'w', encoding='utf-16') as f:
         for old_name, new_name in rename_list:
@@ -160,6 +167,8 @@ def main(driver, sources_cfg, sleep_duration=5):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+    sources_cfg = load_sources_config()
+
     # Initialize Chrome driver with headless option
     chrome_options = Options()
     chrome_options.add_argument('--headless')
@@ -168,8 +177,6 @@ if __name__ == '__main__':
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
     driver = webdriver.Chrome(options=chrome_options)
-    
-    sources_cfg = load_sources_config()
 
     try:
         main(driver, sources_cfg)
