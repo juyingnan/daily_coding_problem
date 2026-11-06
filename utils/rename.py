@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 
 
 MOVIE_ID_RE = re.compile(r'([a-zA-Z]{2,6})-? ?(\d{2,5})')
+MOVIE_SUFFIX_RE = re.compile(r'-(UC|U|C)(?=$|[\s._()\[\]-])', re.IGNORECASE)
 INVALID_FILENAME_TRANS = str.maketrans({c: ' ' for c in '<>:"/\\|?*'})
 
 def load_sources_config():
@@ -36,6 +37,15 @@ def get_movie_id(filename):
     if match:
         return f'{match.group(1).upper()}-{match.group(2)}'
     return None
+
+
+def get_movie_suffix(filename):
+    match = MOVIE_ID_RE.search(filename)
+    if match:
+        suffix_match = MOVIE_SUFFIX_RE.match(filename, match.end())
+        if suffix_match:
+            return f'-{suffix_match.group(1).upper()}'
+    return ''
 
 
 def get_movie_id_source1(movie_id, driver, cfg):
@@ -128,6 +138,7 @@ def get_movie_info(movie_id, driver, cfg, source='source1'):
 def main(driver, sources_cfg, sleep_duration=5, folder_path=None):
     folder_path = folder_path or os.environ.get("RENAME_FOLDER", r'E:\Downloads\TEMP\TEMP')
     rename_list = []
+    planned_targets = set()
     title_cache = {}
 
     for root, dirs, files in os.walk(folder_path):
@@ -142,18 +153,25 @@ def main(driver, sources_cfg, sleep_duration=5, folder_path=None):
                         if new_name:
                             title_cache[movie_id] = new_name
                     if new_name:
-                        final_movie_id = movie_id
-                        if '-C' in file or '-UC' in file:
-                            final_movie_id = f"{final_movie_id}C"
+                        final_movie_id = movie_id + get_movie_suffix(file)
                         if '-4k' in file or '-4K' in file:
                             final_movie_id = f"{final_movie_id}-4k"
                         if final_movie_id != movie_id:
-                            new_name = new_name.replace(movie_id, final_movie_id)
+                            new_name = new_name.replace(movie_id, final_movie_id, 1)
                             movie_id = final_movie_id
                         old_file_path = os.path.relpath(os.path.join(root, file), folder_path)
                         relative_dir = os.path.dirname(old_file_path)
                         new_filename = new_name + os.path.splitext(file)[1]
                         new_file_path = os.path.join(relative_dir, new_filename) if relative_dir else new_filename
+                        target_path = os.path.join(folder_path, new_file_path)
+                        target_key = os.path.normcase(os.path.abspath(target_path))
+                        old_key = os.path.normcase(os.path.abspath(os.path.join(root, file)))
+                        if target_key in planned_targets or (
+                            target_key != old_key and os.path.lexists(target_path)
+                        ):
+                            logging.warning(f"Skipping conflicting target: {old_file_path} -> {new_file_path}")
+                            continue
+                        planned_targets.add(target_key)
                         rename_list.append((old_file_path, new_file_path))
                         logging.info(f"Planned: {old_file_path} -> {new_file_path}")
 
