@@ -144,17 +144,37 @@ def get_movie_info(movie_id, driver, cfg, source='source1'):
 
 
 def main(driver, sources_cfg, sleep_duration=25, folder_path=None):
-    """Flush each planned rename immediately and cool down between queries."""
+    """Resume the existing plan, flushing new entries before the next query."""
     folder_path = folder_path or os.environ.get("RENAME_FOLDER", r'E:\Downloads\TEMP\TEMP')
     planned_targets = set()
     title_cache = {}
     failure_cooldown = 60
     next_delay = 0
+    completed_paths = set()
+    plan_path = os.path.join(folder_path, 'rename_list.txt')
+    needs_newline = False
+    if os.path.exists(plan_path):
+        with open(plan_path, 'r', encoding='utf-16') as existing:
+            for line_number, line in enumerate(existing, 1):
+                if not line.strip():
+                    continue
+                old_name, separator, new_name = line.rstrip('\r\n').partition(' | ')
+                if not separator or not old_name.strip() or not new_name.strip():
+                    raise ValueError(f"Invalid rename plan entry at {plan_path}:{line_number}")
+                old_key = os.path.normcase(os.path.abspath(os.path.join(folder_path, old_name)))
+                target_key = os.path.normcase(os.path.abspath(os.path.join(folder_path, new_name)))
+                completed_paths.update((old_key, target_key))
+                planned_targets.add(target_key)
+                needs_newline = not line.endswith('\n')
 
-    with open(os.path.join(folder_path, 'rename_list.txt'), 'w', encoding='utf-16') as f:
+    with open(plan_path, 'a', encoding='utf-16') as f:
         for root, dirs, files in os.walk(folder_path):
             for file in files:
                 if file.lower().endswith(('.mp4', '.mkv', '.avi', '.wmv', '.srt', '.ssa', '.ass', '.vtt')):
+                    old_key = os.path.normcase(os.path.abspath(os.path.join(root, file)))
+                    if old_key in completed_paths:
+                        logging.info("Skipping existing plan entry: %s", os.path.join(root, file))
+                        continue
                     movie_id = get_movie_id(file)
                     if movie_id:
                         new_name = title_cache.get(movie_id)
@@ -193,6 +213,10 @@ def main(driver, sources_cfg, sleep_duration=25, folder_path=None):
                                 logging.warning(f"Skipping conflicting target: {old_file_path} -> {new_file_path}")
                                 continue
                             planned_targets.add(target_key)
+                            completed_paths.update((old_key, target_key))
+                            if needs_newline:
+                                f.write('\n')
+                                needs_newline = False
                             f.write(f'{old_file_path} | {new_file_path}\n')
                             f.flush()
                             logging.info(f"Planned: {old_file_path} -> {new_file_path}")
