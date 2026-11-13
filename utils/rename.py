@@ -4,6 +4,7 @@ import re
 import time
 import logging
 from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -89,7 +90,14 @@ def get_movie_id_source1(movie_id, driver, cfg):
         logging.warning(f"Title index not found for {movie_id}")
         return ""
     except Exception as e:
-        logging.error(f"Error fetching {movie_id} from source1: {e}")
+        logging.exception(
+            "Error fetching %s from source1 (%s), requested URL: %s",
+            movie_id, type(e).__name__, search_url,
+        )
+        try:
+            logging.warning("Failure page URL: %s; title: %s", driver.current_url, driver.title)
+        except WebDriverException:
+            logging.exception("Could not read failure page details for %s", movie_id)
         return ""
 
 
@@ -135,49 +143,59 @@ def get_movie_info(movie_id, driver, cfg, source='source1'):
     return None
 
 
-def main(driver, sources_cfg, sleep_duration=5, folder_path=None):
+def main(driver, sources_cfg, sleep_duration=25, folder_path=None):
+    """Flush each planned rename immediately and cool down between queries."""
     folder_path = folder_path or os.environ.get("RENAME_FOLDER", r'E:\Downloads\TEMP\TEMP')
-    rename_list = []
     planned_targets = set()
     title_cache = {}
-
-    for root, dirs, files in os.walk(folder_path):
-        for file in files:
-            if file.lower().endswith(('.mp4', '.mkv', '.avi', '.wmv', '.srt', '.ssa', '.ass', '.vtt')):
-                movie_id = get_movie_id(file)
-                if movie_id:
-                    new_name = title_cache.get(movie_id)
-                    if new_name is None:
-                        new_name = get_movie_info(movie_id, driver, sources_cfg, source='source1')
-                        time.sleep(sleep_duration)
-                        if new_name:
-                            title_cache[movie_id] = new_name
-                    if new_name:
-                        final_movie_id = movie_id + get_movie_suffix(file)
-                        if '-4k' in file or '-4K' in file:
-                            final_movie_id = f"{final_movie_id}-4k"
-                        if final_movie_id != movie_id:
-                            new_name = new_name.replace(movie_id, final_movie_id, 1)
-                            movie_id = final_movie_id
-                        old_file_path = os.path.relpath(os.path.join(root, file), folder_path)
-                        relative_dir = os.path.dirname(old_file_path)
-                        new_filename = new_name + os.path.splitext(file)[1]
-                        new_file_path = os.path.join(relative_dir, new_filename) if relative_dir else new_filename
-                        target_path = os.path.join(folder_path, new_file_path)
-                        target_key = os.path.normcase(os.path.abspath(target_path))
-                        old_key = os.path.normcase(os.path.abspath(os.path.join(root, file)))
-                        if target_key in planned_targets or (
-                            target_key != old_key and os.path.lexists(target_path)
-                        ):
-                            logging.warning(f"Skipping conflicting target: {old_file_path} -> {new_file_path}")
-                            continue
-                        planned_targets.add(target_key)
-                        rename_list.append((old_file_path, new_file_path))
-                        logging.info(f"Planned: {old_file_path} -> {new_file_path}")
+    failure_cooldown = 60
+    next_delay = 0
 
     with open(os.path.join(folder_path, 'rename_list.txt'), 'w', encoding='utf-16') as f:
-        for old_name, new_name in rename_list:
-            f.write(f'{old_name} | {new_name}\n')
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith(('.mp4', '.mkv', '.avi', '.wmv', '.srt', '.ssa', '.ass', '.vtt')):
+                    movie_id = get_movie_id(file)
+                    if movie_id:
+                        new_name = title_cache.get(movie_id)
+                        if new_name is None:
+                            if next_delay:
+                                time.sleep(next_delay)
+                            new_name = get_movie_info(movie_id, driver, sources_cfg, source='source1')
+                            if new_name:
+                                title_cache[movie_id] = new_name
+                                failure_cooldown = 60
+                                next_delay = sleep_duration
+                            else:
+                                next_delay = max(sleep_duration, failure_cooldown)
+                                logging.warning(
+                                    "Fetch failed for %s; cooling down for %s seconds before the next query",
+                                    movie_id, next_delay,
+                                )
+                                failure_cooldown = min(failure_cooldown * 2, 300)
+                        if new_name:
+                            final_movie_id = movie_id + get_movie_suffix(file)
+                            if '-4k' in file or '-4K' in file:
+                                final_movie_id = f"{final_movie_id}-4k"
+                            if final_movie_id != movie_id:
+                                new_name = new_name.replace(movie_id, final_movie_id, 1)
+                                movie_id = final_movie_id
+                            old_file_path = os.path.relpath(os.path.join(root, file), folder_path)
+                            relative_dir = os.path.dirname(old_file_path)
+                            new_filename = new_name + os.path.splitext(file)[1]
+                            new_file_path = os.path.join(relative_dir, new_filename) if relative_dir else new_filename
+                            target_path = os.path.join(folder_path, new_file_path)
+                            target_key = os.path.normcase(os.path.abspath(target_path))
+                            old_key = os.path.normcase(os.path.abspath(os.path.join(root, file)))
+                            if target_key in planned_targets or (
+                                target_key != old_key and os.path.lexists(target_path)
+                            ):
+                                logging.warning(f"Skipping conflicting target: {old_file_path} -> {new_file_path}")
+                                continue
+                            planned_targets.add(target_key)
+                            f.write(f'{old_file_path} | {new_file_path}\n')
+                            f.flush()
+                            logging.info(f"Planned: {old_file_path} -> {new_file_path}")
 
     logging.info('Done! The rename list has been saved to "rename_list.txt".')
 
